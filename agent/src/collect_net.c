@@ -1,5 +1,6 @@
 #ifdef _WIN32
 #include <winsock2.h>
+#include <ws2ipdef.h>
 #include <iphlpapi.h>
 #include <netioapi.h>
 #include <stdio.h>

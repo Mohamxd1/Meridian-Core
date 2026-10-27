@@ -11,13 +11,14 @@
  * so the wildcard is re-expanded on every sample and new counters are added on demand. */
 #define MAX_COUNTERS 2048
 static PDH_HQUERY q;
-static struct {
+typedef struct {
     char path[256];
     PDH_HCOUNTER h;
-} util[MAX_COUNTERS], mem[MAX_COUNTERS];
+} counter_t;
+static counter_t util[MAX_COUNTERS], mem[MAX_COUNTERS];
 static int n_util, n_mem;
 
-static void sync_counters(const char *wildcard, typeof(util) tab, int *n) {
+static void sync_counters(const char *wildcard, counter_t *tab, int *n) {
     DWORD len = 0;
     PdhExpandWildCardPathA(NULL, wildcard, NULL, &len, 0);
     if (len == 0) return;
