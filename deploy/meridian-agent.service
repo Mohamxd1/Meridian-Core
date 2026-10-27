@@ -1,0 +1,13 @@
+[Unit]
+Description=Meridian Core agent
+After=network-online.target
+
+[Service]
+EnvironmentFile=/etc/meridian/agent.env
+ExecStart=/opt/meridian/meridian-agent
+Restart=always
+RestartSec=5
+User=meridian
+
+[Install]
+WantedBy=multi-user.target

@@ -34,6 +34,43 @@ It reproduces, at small scale, what Datadog does for CPU and GPU monitoring: col
 
 ---
 
+## Implementation status
+
+Every component in this document is implemented in this repository. Quick start:
+
+```
+cp .env.example .env && docker compose up -d --build     # db, redis, api, alerts, dashboard
+cmake -S agent -B agent/build && cmake --build agent/build
+API_URL=http://localhost:8000/ingest API_KEY=<your key> HOST_NAME=$(hostname) agent/build/meridian-agent
+```
+
+`agent/build/meridian-agent --print` prints a local readout every 2 s (build phase 1) and sends nothing.
+Details of the code layout and decisions are in [docs/architecture.md](docs/architecture.md).
+
+**Verified in the development container (Linux, no GPU, no Docker daemon):**
+
+- Agent: C unit tests and a mock-HTTP-server integration test (payload shape, API-key header, outage with
+  buffered redelivery, clean SIGTERM) pass under AddressSanitizer + UBSan with no warnings.
+- API and alert engine: 35 pytest tests pass against a real PostgreSQL 16 server, using a plain-PostgreSQL
+  stand-in schema (no TimescaleDB extension available there).
+- A real agent process posted to a running API backed by PostgreSQL; `/api/hosts`, `/api/metrics`,
+  `/api/query`, `/api/stream` (SSE) and the 401 response for a bad key were exercised with curl.
+- Dashboard: type-check, 8 Vitest tests, and a production build pass.
+
+**Not verified here, and therefore not claimed:**
+
+- `db/init.sql` against a real TimescaleDB server, and `docker compose up` (no Docker daemon). CI applies
+  `init.sql` to a TimescaleDB service container and runs the API tests against it; that run has not happened yet.
+- The Windows code paths (PDH, `GlobalMemoryStatusEx`, `GetIfTable2`, PDH GPU counters) were written to the
+  APIs in sections 8.2–8.6 but never compiled or run. The Windows CI job is the first compile.
+- NVML collection: the machine has no NVIDIA GPU, so only the "library absent → `gpu=none`" path ran.
+- The phase acceptance checks that need human-driven load or external services: values within a few percent of
+  Task Manager/`nvidia-smi`, a 7-day chart loading in under 1 s, the stress-test firing/resolved Discord
+  messages, and the browser rendering (the dashboard was built but not viewed in a browser).
+- No benchmark numbers are recorded for this project.
+
+---
+
 ## 1. Goals and non-goals
 
 **Goals**
