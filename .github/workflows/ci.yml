@@ -1,0 +1,59 @@
+name: CI
+on: [push, pull_request]
+
+jobs:
+  agent:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install libcurl (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev
+      - name: Configure (Linux, sanitizers)
+        if: runner.os == 'Linux'
+        run: cmake -S agent -B agent/build -DMERIDIAN_SANITIZE=ON
+      - name: Configure (Windows, vcpkg)
+        if: runner.os == 'Windows'
+        run: |
+          vcpkg install curl:x64-windows
+          cmake -S agent -B agent/build -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
+      - run: cmake --build agent/build --config Release
+      - run: ctest --test-dir agent/build -C Release --output-on-failure
+
+  api:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: timescale/timescaledb:latest-pg16
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: meridian_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e 'api[dev]'
+      - run: ruff check api
+        working-directory: .
+      - name: Apply the real schema to the TimescaleDB container
+        run: PGPASSWORD=ci psql -h localhost -U postgres -d meridian_test -v ON_ERROR_STOP=1 -f db/init.sql
+      - run: pytest
+        working-directory: api
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:ci@localhost:5432/meridian_test
+          TEST_DATABASE_KIND: timescale
+
+  dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm, cache-dependency-path: dashboard/package-lock.json }
+      - run: npm ci && npm test && npm run build
+        working-directory: dashboard
